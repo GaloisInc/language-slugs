@@ -13,7 +13,8 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Language.Slugs.AST
+  exposed-modules:     Language.Slugs
+                       Language.Slugs.AST
                        Language.Slugs.Lens
                        Language.Slugs.PP
                        Language.Slugs.Simplify
