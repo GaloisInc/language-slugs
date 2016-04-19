@@ -19,7 +19,7 @@ type Lens' s a = Lens s s a a
 type Getting r s a = (a -> Const r a) -> (s -> Const r s)
 
 view :: Getting a s a -> s -> a
-view l s = unConst (l Const s)
+view l = \ s -> unConst (l Const s)
 {-# INLINE view #-}
 
 
@@ -28,11 +28,11 @@ type ASetter s t a b = (a -> Identity b) -> (s -> Identity t)
 type ASetter' s a = ASetter s s a a
 
 set :: ASetter s t a b -> b -> s -> t
-set l b s = runIdentity (l (\ _ -> Identity b) s)
+set l = \ b s -> runIdentity (l (\ _ -> Identity b) s)
 {-# INLINE set #-}
 
 over :: ASetter s t a b -> (a -> b) -> (s -> t)
-over l f s = runIdentity (l (\a -> Identity (f a)) s)
+over l = \ f s -> runIdentity (l (\a -> Identity (f a)) s)
 {-# INLINE over #-}
 
 

@@ -4,11 +4,20 @@ module Language.Slugs.AST where
 
 import Language.Slugs.Lens
 
+import Data.Bits (Bits,testBit)
+import Data.List (foldl1')
 
-type Var = String
 
-data Spec = Spec { specInput  :: [Var]
-                 , specOutput :: [Var]
+data Var = VarBool String
+         | VarNum String Int Int
+           deriving (Show,Eq,Ord)
+
+data Decl = DeclVar String
+          | DeclNum String Int Int
+            deriving (Show,Eq)
+
+data Spec = Spec { specInput  :: [Decl]
+                 , specOutput :: [Decl]
                  , specEnv    :: State
                  , specSys    :: State
                  } deriving (Show)
@@ -24,6 +33,7 @@ data Expr = ENeg Expr
           | EXor Expr Expr
           | ENext Var
           | EVar Var
+          | EBit Var Int
           | ETrue
           | EFalse
           | EBuf [Expr]
@@ -40,6 +50,7 @@ traverseExpr f (EOr  a b) = EOr  <$> f a <*> f b
 traverseExpr f (EXor a b) = EXor <$> f a <*> f b
 traverseExpr _ e@ENext{}  = pure e
 traverseExpr _ e@EVar{}   = pure e
+traverseExpr _ e@EBit{}   = pure e
 traverseExpr _ ETrue      = pure ETrue
 traverseExpr _ EFalse     = pure EFalse
 traverseExpr f (EBuf es)  = EBuf <$> traverse f es
@@ -51,3 +62,24 @@ subst env = rewriteOf traverseExpr f
   where
   f (EVar v) = lookup v env
   f _        = Nothing
+
+
+-- AST Helpers -----------------------------------------------------------------
+
+{-# SPECIALIZE numBits :: Int -> Int #-}
+numBits :: Integral a => a -> Int
+numBits n = floor (logBase 2 (fromIntegral n)) + 1
+
+{-# SPECIALIZE assignConst :: Var -> Int -> Expr #-}
+assignConst :: (Bits a, Integral a) => Var -> a -> Expr
+assignConst v n = foldl1' EAnd [ genBit i | i <- [ 0 .. varBitSize v - 1 ] ]
+  where
+  genBit i | testBit n i = EBit v i
+           | otherwise   = ENeg (EBit v i)
+
+varBitSize :: Var -> Int
+varBitSize (VarNum _ _ h) = numBits h
+varBitSize (VarBool _)    = error "varBitSize: not a bit vector"
+
+implies :: Expr -> Expr -> Expr
+implies a b = EOr (ENeg a) b
