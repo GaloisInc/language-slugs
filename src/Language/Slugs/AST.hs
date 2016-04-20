@@ -10,6 +10,7 @@ import Data.List (foldl1')
 
 data Var = VarBool String
          | VarNum String Int Int
+           -- ^ Variable name, minimum and maximum integer values
            deriving (Show,Eq,Ord)
 
 data Decl = DeclVar String
@@ -40,7 +41,7 @@ data Expr = ENeg Expr
             -- ^ Memory buffers
           | ERef Int
             -- ^ Memory reference, must be in the context of a buffer
-            deriving (Show,Eq)
+            deriving (Show,Eq,Ord)
 
 -- | Child traversal for expressions.
 traverseExpr :: Traversal' Expr Expr
@@ -83,3 +84,8 @@ varBitSize (VarBool _)    = error "varBitSize: not a bit vector"
 
 implies :: Expr -> Expr -> Expr
 implies a b = EOr (ENeg a) b
+
+-- | Eliminate nested conjunction.
+elimEAnd :: Expr -> [Expr]
+elimEAnd (EAnd a b) = elimEAnd a ++ elimEAnd b
+elimEAnd e          = [e]

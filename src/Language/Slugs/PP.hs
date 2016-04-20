@@ -16,22 +16,22 @@ ppSpec Spec { .. } =
        , vcat (map ppDecl specOutput)
 
        , text "ENV_INIT"
-       , ppExpr (stInit specEnv)
+       , ppTopExpr (stInit specEnv)
 
        , text "ENV_TRANS"
-       , ppExpr (stTrans specEnv)
+       , ppTopExpr (stTrans specEnv)
 
        , text "ENV_LIVELINESS"
-       , ppExpr (stLiveness specEnv)
+       , ppTopExpr (stLiveness specEnv)
 
        , text "SYS_INIT"
-       , ppExpr (stInit specSys)
+       , ppTopExpr (stInit specSys)
 
        , text "SYS_TRANS"
-       , ppExpr (stTrans specSys)
+       , ppTopExpr (stTrans specSys)
 
        , text "SYS_LIVELINESS"
-       , ppExpr (stLiveness specSys)
+       , ppTopExpr (stLiveness specSys)
        ]
 
 
@@ -53,6 +53,10 @@ ppBitN VarBool{}      _ = error "ppBitN: expected a VarNum"
 ppVar :: Var -> Doc
 ppVar (VarBool v)    = text v
 ppVar (VarNum v _ _) = text v
+
+
+ppTopExpr :: Expr -> Doc
+ppTopExpr e = vcat (map ppExpr (elimEAnd e))
 
 
 ppExpr :: Expr -> Doc
