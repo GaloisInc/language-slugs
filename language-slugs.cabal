@@ -19,7 +19,7 @@ library
                        Language.Slugs.Lens
                        Language.Slugs.PP
                        Language.Slugs.Simplify
-  build-depends:       base >=4.8 && <4.9,
+  build-depends:       base >=4.8 && <5,
                        pretty,
                        containers,
                        monadLib >= 3.7.3
