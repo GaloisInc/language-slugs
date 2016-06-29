@@ -16,9 +16,9 @@ simpSpec Spec { .. } =
 
 simpState :: State -> State
 simpState State { .. } =
-  State { stInit     = simpExpr stInit
-        , stTrans    = simpExpr stTrans
-        , stLiveness = simpExpr stLiveness
+  State { stInit     = fmap simpExpr stInit
+        , stTrans    = fmap simpExpr stTrans
+        , stLiveness = fmap simpExpr stLiveness
         }
 
 simpExpr :: Expr -> Expr

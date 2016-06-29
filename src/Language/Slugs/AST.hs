@@ -13,19 +13,15 @@ data Var = VarBool String
            -- ^ Variable name, minimum and maximum integer values
            deriving (Show,Eq,Ord)
 
-data Decl = DeclVar String
-          | DeclNum String Int Int
-            deriving (Show,Eq)
-
-data Spec = Spec { specInput  :: [Decl]
-                 , specOutput :: [Decl]
+data Spec = Spec { specInput  :: [Var]
+                 , specOutput :: [Var]
                  , specEnv    :: State
                  , specSys    :: State
                  } deriving (Show)
 
-data State = State { stInit     :: Expr
-                   , stTrans    :: Expr
-                   , stLiveness :: Expr
+data State = State { stInit     :: Maybe Expr
+                   , stTrans    :: Maybe Expr
+                   , stLiveness :: Maybe Expr
                    } deriving (Show)
 
 data Expr = ENeg Expr

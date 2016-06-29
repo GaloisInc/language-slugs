@@ -8,46 +8,37 @@ import Text.PrettyPrint.HughesPJ (Doc,vcat,text,int,hsep,char,(<+>),(<>))
 
 
 ppSpec :: Spec -> Doc
-ppSpec Spec { .. } =
-  vcat [ text "INPUT"
-       , vcat (map ppDecl specInput)
+ppSpec Spec { .. } = vcat $ concat $
+         [ [ section "INPUT"
+           , vcat (map ppDecl specInput)
+           , text " " ] | not (null specInput) ]
 
-       , text "OUTPUT"
-       , vcat (map ppDecl specOutput)
+      ++ [ [ section "OUTPUT"
+           , vcat (map ppDecl specOutput)
+           , text " " ] | not (null specOutput) ]
 
-       , text "ENV_INIT"
-       , ppTopExpr (stInit specEnv)
+      ++ ppState "ENV" specEnv
+      ++ ppState "SYS" specSys
 
-       , text "ENV_TRANS"
-       , ppTopExpr (stTrans specEnv)
+ppState :: String -> State -> [[Doc]]
+ppState pfx State { .. } =
+     [ [ section (pfx ++ "_INIT"),     ppTopExpr i, text " " ] | Just i <- [stInit    ] ]
+  ++ [ [ section (pfx ++ "_TRANS"),    ppTopExpr t, text " " ] | Just t <- [stTrans   ] ]
+  ++ [ [ section (pfx ++ "_LIVENESS"), ppTopExpr t, text " " ] | Just t <- [stLiveness] ]
 
-       , text "ENV_LIVELINESS"
-       , ppTopExpr (stLiveness specEnv)
+section :: String -> Doc
+section str = char '[' <> text str <> char ']'
 
-       , text "SYS_INIT"
-       , ppTopExpr (stInit specSys)
+ppDecl :: Var -> Doc
+ppDecl (VarBool v)    = text v
+ppDecl (VarNum v l h) =
+   vcat (ppBit0 v l h : [ ppBitN v i | i <- [ 1 .. numBits h - 1 ] ])
 
-       , text "SYS_TRANS"
-       , ppTopExpr (stTrans specSys)
+ppBit0 :: String -> Int -> Int -> Doc
+ppBit0 v l h = ppBitN v 0 <> char '.' <> int l <> char '.' <> int h
 
-       , text "SYS_LIVELINESS"
-       , ppTopExpr (stLiveness specSys)
-       ]
-
-
-ppDecl :: Decl -> Doc
-ppDecl (DeclVar v)     = text v
-ppDecl (DeclNum v l h) =
-  let var = VarNum v l h
-   in vcat (ppBit0 var : [ ppBitN var i | i <- [ 1 .. varBitSize var - 1 ] ])
-
-ppBit0 :: Var -> Doc
-ppBit0 v@(VarNum _ l h) = ppBitN v 0 <> char '.' <> int l <> char '.' <> int h
-ppBit0 VarBool{}        = error "ppBit0: expected a VarNum"
-
-ppBitN :: Var -> Int -> Doc
-ppBitN (VarNum v _ _) i = text v <> char '@' <> int i
-ppBitN VarBool{}      _ = error "ppBitN: expected a VarNum"
+ppBitN :: String -> Int -> Doc
+ppBitN v i = text v <> char '@' <> int i
 
 
 ppVar :: Var -> Doc
@@ -66,8 +57,13 @@ ppExpr (EOr a b)  = char '|' <+> ppExpr a <+> ppExpr b
 ppExpr (EXor a b) = char '^' <+> ppExpr a <+> ppExpr b
 ppExpr (ENext v)  = ppVar v <> char '\''
 ppExpr (EVar v)   = ppVar v
-ppExpr (EBit v 0) = ppBit0 v
-ppExpr (EBit v i) = ppBitN v i
+
+ppExpr (EBit v i) =
+  case v of
+    VarNum s l h | i == 0    -> ppBit0 s l h
+                 | otherwise -> ppBitN s i
+    VarBool _    -> error "EBit used with boolean variable"
+
 ppExpr ETrue      = char '1'
 ppExpr EFalse     = char '0'
 ppExpr (EBuf es)  = char '$' <+> int (length es) <+> hsep (map ppExpr es)
