@@ -18,10 +18,18 @@ library
                        Language.Slugs.CSE
                        Language.Slugs.Lens
                        Language.Slugs.PP
+                       Language.Slugs.Run
                        Language.Slugs.Simplify
   build-depends:       base >=4.8 && <5,
                        pretty,
                        containers,
-                       monadLib >= 3.7.3
+                       monadLib >= 3.7.3,
+                       aeson,
+                       bytestring,
+                       text,
+                       process,
+                       process-extras,
+                       directory,
+                       unordered-containers
   hs-source-dirs:      src
   default-language:    Haskell2010
