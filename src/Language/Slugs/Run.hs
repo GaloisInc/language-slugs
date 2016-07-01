@@ -5,6 +5,8 @@
 module Language.Slugs.Run (
     SlugsResult(..), runSlugs,
     SlugsError(..),
+    FSM(..),
+    Node(..)
   ) where
 
 import Control.Exception
