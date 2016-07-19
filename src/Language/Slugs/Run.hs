@@ -13,7 +13,7 @@ import Control.Exception
 import Language.Slugs.AST
 import Language.Slugs.PP
 
-import           Control.Monad (unless)
+import           Control.Monad (unless,when)
 import           Data.Aeson
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified Data.Map.Strict as Map
@@ -38,8 +38,8 @@ data SlugsError = SlugsFailed
 instance Exception SlugsError
 
 
-runSlugs :: FilePath -> Spec -> IO SlugsResult
-runSlugs slugs spec =
+runSlugs :: Bool -> FilePath -> Spec -> IO SlugsResult
+runSlugs dumpJSON slugs spec =
   do tmpPath <- getTemporaryDirectory
      bracket (openTempFile tmpPath "slugsin") cleanup $ \ (tmpFile,h) ->
        do writeSpec spec h
@@ -52,9 +52,10 @@ runSlugs slugs spec =
           let status = take 1 (drop 1 (L.lines err))
           if status == ["RESULT: Specification is unrealizable."]
              then return Unrealizable
-             else case decode out of
-                    Just val -> return (StateMachine val)
-                    Nothing  -> throwIO DecodeFailed
+             else do when dumpJSON (L.putStrLn out)
+                     case decode out of
+                       Just val -> return (StateMachine val)
+                       Nothing  -> throwIO DecodeFailed
 
   where
   cleanup (f,h) =
