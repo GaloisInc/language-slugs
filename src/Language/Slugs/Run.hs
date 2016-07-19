@@ -45,15 +45,16 @@ runSlugs slugs spec =
        do writeSpec spec h
           hClose h
 
-          (ec,out,_) <- readProcessWithExitCode slugs
-                           ["--explicitStrategy", "--jsonOutput", tmpFile]
-                           L.empty
-          if ec == ExitSuccess
-             then case decode out of
+          (ec,out,err) <- readProcessWithExitCode slugs
+                             ["--explicitStrategy", "--jsonOutput", tmpFile]
+                             L.empty
+
+          let status = take 1 (drop 1 (L.lines err))
+          if status == ["RESULT: Specification is unrealizable."]
+             then return Unrealizable
+             else case decode out of
                     Just val -> return (StateMachine val)
                     Nothing  -> throwIO DecodeFailed
-
-             else return Unrealizable
 
   where
   cleanup (f,h) =
