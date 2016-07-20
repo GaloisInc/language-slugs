@@ -39,7 +39,7 @@ instance Exception SlugsError
 
 
 runSlugs :: Bool -> FilePath -> Spec -> IO SlugsResult
-runSlugs dumpJSON slugs spec =
+runSlugs dbg slugs spec =
   do tmpPath <- getTemporaryDirectory
      bracket (openTempFile tmpPath "slugsin") cleanup $ \ (tmpFile,h) ->
        do writeSpec spec h
@@ -49,10 +49,12 @@ runSlugs dumpJSON slugs spec =
                              ["--explicitStrategy", "--jsonOutput", tmpFile]
                              L.empty
 
+          when dbg (L.putStrLn err)
+
           let status = take 1 (drop 1 (L.lines err))
-          if status == ["RESULT: Specification is unrealizable."]
+          if status /= ["RESULT: Specification is realizable."]
              then return Unrealizable
-             else do when dumpJSON (L.putStrLn out)
+             else do when dbg (L.putStrLn out)
                      case decode out of
                        Just val -> return (StateMachine val)
                        Nothing  -> throwIO DecodeFailed
