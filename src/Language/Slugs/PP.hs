@@ -32,18 +32,23 @@ section str = char '[' <> text str <> char ']'
 ppDecl :: Var -> Doc
 ppDecl (VarBool v)    = text v
 ppDecl (VarNum v l h) =
-   vcat (ppBit0 v l h : [ ppBitN v i | i <- [ 1 .. numBits h - 1 ] ])
+  let var = text v
+   in vcat (ppBit0 var l h : [ ppBitN var i | i <- [ 1 .. numBits h - 1 ] ])
 
-ppBit0 :: String -> Int -> Int -> Doc
-ppBit0 v l h = ppBitN v 0 <> char '.' <> int l <> char '.' <> int h
+ppBit0 :: Doc -> Int -> Int -> Doc
+ppBit0 var l h = ppBitN var 0 <> char '.' <> int l <> char '.' <> int h
 
-ppBitN :: String -> Int -> Doc
-ppBitN v i = text v <> char '@' <> int i
+ppBitN :: Doc -> Int -> Doc
+ppBitN var i = var <> char '@' <> int i
 
 
 ppVar :: Var -> Doc
 ppVar (VarBool v)    = text v
 ppVar (VarNum v _ _) = text v
+
+ppUse :: Use -> Doc
+ppUse (UVar  v) = ppVar v
+ppUse (UNext v) = ppVar v <> char '\''
 
 
 ppTopExpr :: Expr -> Doc
@@ -55,16 +60,23 @@ ppExpr (ENeg e)   = char '!' <+> ppExpr e
 ppExpr (EAnd a b) = char '&' <+> ppExpr a <+> ppExpr b
 ppExpr (EOr a b)  = char '|' <+> ppExpr a <+> ppExpr b
 ppExpr (EXor a b) = char '^' <+> ppExpr a <+> ppExpr b
-ppExpr (ENext v)  = ppVar v <> char '\''
-ppExpr (EVar v)   = ppVar v
+ppExpr (EVar v)   = ppUse v
 
-ppExpr (EBit v i) =
-  case v of
-    VarNum s l h | i == 0    -> ppBit0 s l h
-                 | otherwise -> ppBitN s i
-    VarBool _    -> error "EBit used with boolean variable"
+ppExpr (EBit (UNext v) i) = ppEBit (<> char '\'') v i
+ppExpr (EBit (UVar  v) i) = ppEBit id             v i
 
 ppExpr ETrue      = char '1'
 ppExpr EFalse     = char '0'
 ppExpr (EBuf es)  = char '$' <+> int (length es) <+> hsep (map ppExpr es)
 ppExpr (ERef n)   = char '?' <+> int n
+
+
+ppEBit :: (Doc -> Doc) -> Var -> Int -> Doc
+
+ppEBit adjust (VarNum s l h) i
+  | i == 0    = ppBit0 var l h
+  | otherwise = ppBitN var i
+  where
+  var = adjust (text s)
+
+ppEBit _ VarBool{} _ = error "EBit used with boolean variable"

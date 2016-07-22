@@ -27,15 +27,35 @@ import           System.IO (openTempFile,Handle,hFlush,hPrint,hClose)
 import           System.Process.ByteString.Lazy (readProcessWithExitCode)
 
 
-data SlugsResult = Unrealizable
+data SlugsResult = Unrealizable FSM
+                   -- ^ The input specification was not realizable, and the
+                   -- returned FSM is a counter-strategy.
+
                  | StateMachine FSM
+                   -- ^ The input specification was realizable, and the returned
+                   -- FSM describes the controller.
                    deriving (Show)
 
-data SlugsError = SlugsFailed
+data SlugsError = SlugsError L.ByteString
                 | DecodeFailed
                   deriving (Typeable,Show)
 
 instance Exception SlugsError
+
+
+data SlugsResponse = RespRealizable
+                   | RespUnrealizable
+                   | RespError L.ByteString
+                     deriving (Eq,Show)
+
+-- | From the stderr of running slugs, interpret its response.
+parseResponse :: L.ByteString -> SlugsResponse
+parseResponse err =
+  case take 1 (drop 1 (L.lines err)) of
+    ["RESULT: Specification is realizable."]     -> RespRealizable
+    ["RESULT: Specification is not realizable."] -> RespUnrealizable
+    ls                                           -> RespError (L.unlines ls)
+
 
 
 runSlugs :: Bool -> FilePath -> Spec -> IO SlugsResult
@@ -51,18 +71,36 @@ runSlugs dbg slugs spec =
 
           when dbg (L.putStrLn err)
 
-          let status = take 1 (drop 1 (L.lines err))
-          if status /= ["RESULT: Specification is realizable."]
-             then return Unrealizable
-             else do when dbg (L.putStrLn out)
-                     case decode out of
-                       Just val -> return (StateMachine val)
-                       Nothing  -> throwIO DecodeFailed
+          case parseResponse err of
+
+            -- decode the json result
+            RespRealizable ->
+              do when dbg (L.putStrLn out)
+                 case decode out of
+                   Just val -> return (StateMachine val)
+                   Nothing  -> throwIO DecodeFailed
+
+            -- re-run slugs and generate the counter-strategy
+            RespUnrealizable ->
+              do fsm <- counterStrategy dbg slugs tmpFile
+                 return (Unrealizable fsm)
+
+            RespError msg -> throwIO (SlugsError msg)
 
   where
   cleanup (f,h) =
     do hClose h
        removeFile f
+
+
+counterStrategy :: Bool -> FilePath -> FilePath -> IO FSM
+counterStrategy dbg slugs specFile = return undefined
+  -- do (ec,out,err) <- readProcessWithExitCode slugs ["--counterStrategy", specFile]
+
+  --    when dbg (L.putStrLn err)
+
+  --    case parseResponse err of
+  --      RespRealizable ->
 
 
 -- | Write the specification to a temporary file.
