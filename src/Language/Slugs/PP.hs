@@ -62,8 +62,8 @@ ppExpr (EOr a b)  = char '|' <+> ppExpr a <+> ppExpr b
 ppExpr (EXor a b) = char '^' <+> ppExpr a <+> ppExpr b
 ppExpr (EVar v)   = ppUse v
 
-ppExpr (EBit (UNext v) i) = ppEBit (<> char '\'') v i
-ppExpr (EBit (UVar  v) i) = ppEBit id             v i
+ppExpr (EBit (UNext v) i) = ppEBit v i <> char '\''
+ppExpr (EBit (UVar  v) i) = ppEBit v i
 
 ppExpr ETrue      = char '1'
 ppExpr EFalse     = char '0'
@@ -71,12 +71,10 @@ ppExpr (EBuf es)  = char '$' <+> int (length es) <+> hsep (map ppExpr es)
 ppExpr (ERef n)   = char '?' <+> int n
 
 
-ppEBit :: (Doc -> Doc) -> Var -> Int -> Doc
+ppEBit :: Var -> Int -> Doc
 
-ppEBit adjust (VarNum s l h) i
-  | i == 0    = ppBit0 var l h
-  | otherwise = ppBitN var i
-  where
-  var = adjust (text s)
+ppEBit var@(VarNum s l h) i
+  | i == 0    = ppBit0 (ppVar var) l h
+  | otherwise = ppBitN (ppVar var) i
 
-ppEBit _ VarBool{} _ = error "EBit used with boolean variable"
+ppEBit VarBool{} _ = error "EBit used with boolean variable"
