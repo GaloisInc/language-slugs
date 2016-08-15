@@ -5,6 +5,7 @@
 module Language.Slugs.Run (
     SlugsResult(..), runSlugs,
     SlugsError(..),
+    fsmFromJSON,
     FSM(..),
     Node(..)
   ) where
@@ -111,6 +112,9 @@ writeSpec spec h =
 
 
 -- Controller ------------------------------------------------------------------
+
+fsmFromJSON :: L.ByteString -> Maybe FSM
+fsmFromJSON  = decode
 
 data FSM = FSM { fsmStateDescr :: [String]
                , fsmNodes      :: Map.Map Int Node
