@@ -5,7 +5,7 @@
 module Language.Slugs.Run (
     SlugsResult(..), runSlugs,
     SlugsError(..),
-    fsmFromJSON,
+    fsmFromJSON, readSlugs,
     FSM(..),
     Node(..)
   ) where
@@ -157,6 +157,9 @@ instance FromJSON Node where
 
 -- Slugs Controller ------------------------------------------------------------
 
+readSlugs :: ReadS FSM
+readSlugs  = readP_to_S parseSlugsOut
+
 parseSlugsOut :: ReadP FSM
 parseSlugsOut  =
   do entries <- manyTill parseSlugsNode eof
@@ -191,7 +194,3 @@ parseSlugsState  = between (char '<') (char '>') $
        _     <- char ':'
        bit   <- readS_to_P readDec
        return (label,bit)
-
-test =
-  do out <- readFile "../../slugs/examples/out"
-     return (readP_to_S parseSlugsOut out)
