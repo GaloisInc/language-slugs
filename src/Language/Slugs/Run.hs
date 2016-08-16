@@ -22,10 +22,12 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import           Data.Typeable
+import           Numeric (readDec)
 import           System.Directory (getTemporaryDirectory,removeFile)
 import           System.Exit (ExitCode(..))
 import           System.IO (openTempFile,Handle,hFlush,hPrint,hClose)
 import           System.Process.ByteString.Lazy (readProcessWithExitCode)
+import           Text.ParserCombinators.ReadP
 
 
 data SlugsResult = Unrealizable FSM
@@ -111,7 +113,7 @@ writeSpec spec h =
      hFlush h
 
 
--- Controller ------------------------------------------------------------------
+-- JSON Controller -------------------------------------------------------------
 
 fsmFromJSON :: L.ByteString -> Maybe FSM
 fsmFromJSON  = decode
@@ -151,3 +153,45 @@ instance FromJSON Node where
        nState <- obj .: "state"
        nTrans <- obj .: "trans"
        return Node { .. }
+
+
+-- Slugs Controller ------------------------------------------------------------
+
+parseSlugsOut :: ReadP FSM
+parseSlugsOut  =
+  do entries <- manyTill parseSlugsNode eof
+     let (ds,states) = unzip entries
+     return FSM { fsmStateDescr = head ds
+                , fsmNodes      = Map.fromList states }
+
+parseSlugsNode :: ReadP ([String],(Int,Node))
+parseSlugsNode  =
+  do _      <- string "State "
+     ix     <- readS_to_P readDec
+     _      <- string " with rank "
+     nRank  <- readS_to_P readDec
+     _      <- string " -> "
+     (d,s)  <- parseSlugsState
+     skipSpaces
+     _      <- string "With successors : "
+     nTrans <- readS_to_P readDec `sepBy` (char ',' >> skipSpaces)
+     skipSpaces
+     return (d, (ix, Node { nState = s, .. }))
+
+parseSlugsState :: ReadP ([String], [Int])
+parseSlugsState  = between (char '<') (char '>') $
+  do entries <- entry `sepBy` (char ',' >> skipSpaces)
+     return (unzip entries)
+
+  where
+
+  entry :: ReadP (String,Int)
+  entry =
+    do label <- munch1 (/= ':')
+       _     <- char ':'
+       bit   <- readS_to_P readDec
+       return (label,bit)
+
+test =
+  do out <- readFile "../../slugs/examples/out"
+     return (readP_to_S parseSlugsOut out)
