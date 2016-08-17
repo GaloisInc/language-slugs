@@ -25,6 +25,7 @@ library
                        containers,
                        monadLib >= 3.7.3,
                        aeson,
+                       attoparsec,
                        bytestring,
                        text,
                        process,

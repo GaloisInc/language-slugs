@@ -5,7 +5,7 @@
 module Language.Slugs.Run (
     SlugsResult(..), runSlugs,
     SlugsError(..),
-    fsmFromJSON, readSlugs,
+    fsmFromJSON, parseSlugsOut,
     FSM(..),
     Node(..)
   ) where
@@ -16,6 +16,10 @@ import Language.Slugs.PP
 
 import           Control.Monad (unless,when)
 import           Data.Aeson
+import           Data.Attoparsec.ByteString.Lazy
+                     (Parser,parse,Result(..),satisfyWith,manyTill',many1,string
+                     ,sepBy,takeWhile1,inClass,skipWhile,endOfInput,satisfy,skip)
+import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified Data.Map.Strict as Map
 import qualified Data.HashMap.Strict as HM
@@ -27,7 +31,6 @@ import           System.Directory (getTemporaryDirectory,removeFile)
 import           System.Exit (ExitCode(..))
 import           System.IO (openTempFile,Handle,hFlush,hPrint,hClose)
 import           System.Process.ByteString.Lazy (readProcessWithExitCode)
-import           Text.ParserCombinators.ReadP
 
 
 data SlugsResult = Unrealizable FSM
@@ -69,7 +72,7 @@ runSlugs dbg slugs spec =
           hClose h
 
           (ec,out,err) <- readProcessWithExitCode slugs
-                             ["--explicitStrategy", "--jsonOutput", tmpFile]
+                             ["--explicitStrategy", tmpFile]
                              L.empty
 
           when dbg (L.putStrLn err)
@@ -79,7 +82,7 @@ runSlugs dbg slugs spec =
             -- decode the json result
             RespRealizable ->
               do when dbg (L.putStrLn out)
-                 case decode out of
+                 case parseSlugsOut out of
                    Just val -> return (StateMachine val)
                    Nothing  -> throwIO DecodeFailed
 
@@ -157,40 +160,68 @@ instance FromJSON Node where
 
 -- Slugs Controller ------------------------------------------------------------
 
-readSlugs :: ReadS FSM
-readSlugs  = readP_to_S parseSlugsOut
+parseSlugsOut :: L.ByteString -> Maybe FSM
+parseSlugsOut input =
+  case parse parseFSM input of
+    Done _ r   -> Just r
+    Fail _ _ _ -> Nothing
 
-parseSlugsOut :: ReadP FSM
-parseSlugsOut  =
-  do entries <- manyTill parseSlugsNode eof
+parseFSM :: Parser FSM
+parseFSM  =
+  do entries <- manyTill' parseSlugsNode endOfInput
      let (ds,states) = unzip entries
      return FSM { fsmStateDescr = head ds
                 , fsmNodes      = Map.fromList states }
 
-parseSlugsNode :: ReadP ([String],(Int,Node))
+parseSlugsNode :: Parser ([String],(Int,Node))
 parseSlugsNode  =
   do _      <- string "State "
-     ix     <- readS_to_P readDec
+     ix     <- decimal
      _      <- string " with rank "
-     nRank  <- readS_to_P readDec
+     nRank  <- decimal
      _      <- string " -> "
      (d,s)  <- parseSlugsState
      skipSpaces
      _      <- string "With successors : "
-     nTrans <- readS_to_P readDec `sepBy` (char ',' >> skipSpaces)
+     nTrans <- decimal `sepBy` (char ',' >> skipSpaces)
      skipSpaces
      return (d, (ix, Node { nState = s, .. }))
 
-parseSlugsState :: ReadP ([String], [Int])
+parseSlugsState :: Parser ([String], [Int])
 parseSlugsState  = between (char '<') (char '>') $
   do entries <- entry `sepBy` (char ',' >> skipSpaces)
      return (unzip entries)
 
   where
 
-  entry :: ReadP (String,Int)
+  entry :: Parser (String,Int)
   entry =
     do label <- munch1 (/= ':')
        _     <- char ':'
-       bit   <- readS_to_P readDec
+       bit   <- decimal
        return (label,bit)
+
+between :: Parser start -> Parser end -> Parser body -> Parser body
+between start end body =
+  do _   <- start
+     res <- body
+     _   <- end
+     return res
+
+char :: Char -> Parser ()
+char c = skip (inClass [c])
+
+munch1 :: (Char -> Bool) -> Parser String
+munch1 p =
+  do bytes <- takeWhile1 (p . toEnum . fromEnum)
+     return (S.unpack bytes)
+
+skipSpaces :: Parser ()
+skipSpaces  = skipWhile (inClass " \t\r\n")
+
+decimal :: (Eq a, Num a) => Parser a
+decimal  =
+  do digits <- takeWhile1 (inClass "1234567890")
+     case readDec (S.unpack digits) of
+       [(x,"")] -> return x
+       _        -> fail "Couldn't read decimal number"
