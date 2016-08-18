@@ -14,6 +14,7 @@ import Control.Exception
 import Language.Slugs.AST
 import Language.Slugs.PP
 
+import           Control.Applicative (Alternative(..))
 import           Control.Monad (unless,when)
 import           Data.Aeson
 import           Data.Attoparsec.ByteString.Lazy
@@ -26,6 +27,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import           Data.Typeable
+import           Data.Word (Word8)
 import           Numeric (readDec)
 import           System.Directory (getTemporaryDirectory,removeFile)
 import           System.Exit (ExitCode(..))
@@ -178,14 +180,22 @@ parseSlugsNode  =
   do _      <- string "State "
      ix     <- decimal
      _      <- string " with rank "
-     nRank  <- decimal
+     nRank  <- decimal <|> (skipWhile (not . isSpace) >> return 0)
      _      <- string " -> "
      (d,s)  <- parseSlugsState
      skipSpaces
-     _      <- string "With successors : "
-     nTrans <- decimal `sepBy` (char ',' >> skipSpaces)
+     nTrans <- successors <|> noSuccessors
      skipSpaces
      return (d, (ix, Node { nState = s, .. }))
+
+successors =
+  do _ <- string "With successors : "
+     decimal `sepBy` (char ',' >> skipSpaces)
+
+noSuccessors =
+  do _ <- string "With no successors."
+     return []
+
 
 parseSlugsState :: Parser ([String], [Int])
 parseSlugsState  = between (char '<') (char '>') $
@@ -217,7 +227,10 @@ munch1 p =
      return (S.unpack bytes)
 
 skipSpaces :: Parser ()
-skipSpaces  = skipWhile (inClass " \t\r\n")
+skipSpaces  = skipWhile isSpace
+
+isSpace :: Word8 -> Bool
+isSpace  = inClass " \t\r\n"
 
 decimal :: (Eq a, Num a) => Parser a
 decimal  =
