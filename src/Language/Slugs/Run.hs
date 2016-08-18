@@ -60,9 +60,9 @@ data SlugsResponse = RespRealizable
 parseResponse :: L.ByteString -> SlugsResponse
 parseResponse err =
   case take 1 (drop 1 (L.lines err)) of
-    ["RESULT: Specification is realizable."]     -> RespRealizable
-    ["RESULT: Specification is not realizable."] -> RespUnrealizable
-    ls                                           -> RespError (L.unlines ls)
+    ["RESULT: Specification is realizable."]   -> RespRealizable
+    ["RESULT: Specification is unrealizable."] -> RespUnrealizable
+    ls                                         -> RespError (L.unlines ls)
 
 
 
