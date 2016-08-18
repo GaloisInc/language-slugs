@@ -102,13 +102,26 @@ runSlugs dbg slugs spec =
 
 
 counterStrategy :: Bool -> FilePath -> FilePath -> IO FSM
-counterStrategy dbg slugs specFile = return undefined
-  -- do (ec,out,err) <- readProcessWithExitCode slugs ["--counterStrategy", specFile]
+counterStrategy dbg slugs specFile =
+  do (ec,out,err) <- readProcessWithExitCode slugs
+                         ["--counterStrategy", specFile]
+                         L.empty
 
-  --    when dbg (L.putStrLn err)
+     when dbg (L.putStrLn err)
 
-  --    case parseResponse err of
-  --      RespRealizable ->
+     case parseResponse err of
+
+       RespUnrealizable -> 
+         do when dbg (L.putStrLn out)
+            case parseSlugsOut out of
+              Just val -> return val
+              Nothing  -> throwIO DecodeFailed
+
+       RespRealizable ->
+         throwIO (SlugsError "Expected unrealizable specification")
+
+       RespError msg ->
+         throwIO (SlugsError msg)
 
 
 -- | Write the specification to a temporary file.
