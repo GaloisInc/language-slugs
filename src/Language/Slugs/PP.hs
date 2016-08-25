@@ -17,14 +17,14 @@ ppSpec Spec { .. } = vcat $ concat $
            , vcat (map ppDecl specOutput)
            , text " " ] | not (null specOutput) ]
 
-      ++ ppState "ENV" specEnv
-      ++ ppState "SYS" specSys
+      ++ [ppState "ENV" specEnv]
+      ++ [ppState "SYS" specSys]
 
-ppState :: String -> State -> [[Doc]]
+ppState :: String -> State -> [Doc]
 ppState pfx State { .. } =
-     [ [ section (pfx ++ "_INIT"),     ppTopExpr i, text " " ] | Just i <- [stInit    ] ]
-  ++ [ [ section (pfx ++ "_TRANS"),    ppTopExpr t, text " " ] | Just t <- [stTrans   ] ]
-  ++ [ [ section (pfx ++ "_LIVENESS"), ppTopExpr t, text " " ] | Just t <- [stLiveness] ]
+  [ section (pfx ++ "_INIT"),     ppTopExpr stInit,     text " "
+  , section (pfx ++ "_TRANS"),    ppTopExpr stTrans,    text " "
+  , section (pfx ++ "_LIVENESS"), ppTopExpr stLiveness, text " " ]
 
 section :: String -> Doc
 section str = char '[' <> text str <> char ']'

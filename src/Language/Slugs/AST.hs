@@ -4,8 +4,9 @@ module Language.Slugs.AST where
 
 import Language.Slugs.Lens
 
-import Data.Bits (Bits,testBit)
+import Data.Bits (Bits,testBit,bit)
 import Data.List (foldl1')
+import Data.Maybe (catMaybes)
 
 
 data Var = VarBool String
@@ -19,9 +20,9 @@ data Spec = Spec { specInput  :: [Var]
                  , specSys    :: State
                  } deriving (Show)
 
-data State = State { stInit     :: Maybe Expr
-                   , stTrans    :: Maybe Expr
-                   , stLiveness :: Maybe Expr
+data State = State { stInit     :: Expr
+                   , stTrans    :: Expr
+                   , stLiveness :: Expr
                    } deriving (Show)
 
 data Use = UVar Var
@@ -60,7 +61,8 @@ traverseExpr _ e@ERef{}   = pure e
 
 {-# SPECIALIZE numBits :: Int -> Int #-}
 numBits :: Integral a => a -> Int
-numBits n = floor (logBase 2 (fromIntegral n)) + 1
+numBits n | n <= 0    = 1
+          | otherwise = floor (logBase 2 (fromIntegral n)) + 1
 
 class HasVar var where
   toUse      :: var -> Use
@@ -100,8 +102,61 @@ assignConst var n = foldl1' EAnd [ genBit i | i <- [ 0 .. varBitSize var - 1 ] ]
 
   use = toUse var
 
+
+-- | Add variable limits for integer variables.
+addLimits :: Spec -> Spec
+addLimits Spec {..} =
+  Spec { specEnv = addStateLimits envLimit specEnv
+       , specSys = addStateLimits sysLimit specSys
+       , ..}
+
+  where
+
+  envLimits = catMaybes [ varLimit n mn mx | VarNum n mn mx <- specInput  ]
+  sysLimits = catMaybes [ varLimit n mn mx | VarNum n mn mx <- specOutput ]
+
+  envLimit | null envLimits = Nothing
+           | otherwise      = Just (foldl1' EAnd envLimits)
+
+  sysLimit | null sysLimits = Nothing
+           | otherwise      = Just (foldl1' EAnd sysLimits)
+
+  addStateLimits (Just limits) State {..} =
+    State { stInit  = stInit  `eAnd` limits
+          , stTrans = stTrans `eAnd` limits
+          , ..}
+
+  addStateLimits Nothing st = st
+
+-- | Produce a limit expression for a numeric variable.
+varLimit :: String -- ^ Variable name
+         -> Int    -- ^ Min value
+         -> Int    -- ^ Max value
+         -> Maybe Expr
+varLimit var mn mx
+  | mx == bit size - 1 = Nothing
+  | otherwise          = Just (foldl step EFalse [0 .. size - 1])
+  where
+  size      = numBits mx
+  limitDiff = mx + 1
+
+  use       = EBit (UVar (VarNum var mn mx))
+
+  step acc n
+    | testBit limitDiff n = EOr  (ENeg (use n)) acc
+    | otherwise           = EAnd (ENeg (use n)) acc
+
+
 implies :: Expr -> Expr -> Expr
 implies a b = EOr (ENeg a) b
+
+eAnd :: Expr -> Expr -> Expr
+eAnd a b =
+  let xs = elimEAnd a
+      ys = elimEAnd b
+   in case filter (/= ETrue) (xs ++ ys) of
+        [] -> ETrue
+        es -> foldl1 EAnd es 
 
 -- | Eliminate nested conjunction.
 elimEAnd :: Expr -> [Expr]
