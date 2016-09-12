@@ -106,30 +106,27 @@ assignConst var n = foldl1' EAnd [ genBit i | i <- [ 0 .. varBitSize var - 1 ] ]
 -- | Add variable limits for integer variables.
 addLimits :: Spec -> Spec
 addLimits Spec {..} =
-  Spec { specEnv = addStateLimits envLimit specEnv
-       , specSys = addStateLimits sysLimit specSys
+  Spec { specEnv = addStateLimits envInitLimits envTransLimits specEnv
+       , specSys = addStateLimits sysInitLimits sysTransLimits specSys
        , ..}
 
   where
 
-  envLimits = catMaybes [ varLimit n mn mx | VarNum n mn mx <- specInput  ]
-  sysLimits = catMaybes [ varLimit n mn mx | VarNum n mn mx <- specOutput ]
+  envInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum n mn mx) <- specInput  ]
+  envTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum n mn mx) <- specInput  ]
+  sysInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum n mn mx) <- specOutput ]
+  sysTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum n mn mx) <- specOutput ]
 
-  envLimit | null envLimits = Nothing
-           | otherwise      = Just (foldl1' EAnd envLimits)
+  mkLimit ls | null ls   = ETrue
+             | otherwise = foldl1' EAnd ls
 
-  sysLimit | null sysLimits = Nothing
-           | otherwise      = Just (foldl1' EAnd sysLimits)
-
-  addStateLimits (Just limits) State {..} =
-    State { stInit  = stInit  `eAnd` limits
-          , stTrans = stTrans `eAnd` limits
+  addStateLimits is ts State {..} =
+    State { stInit  = stInit  `eAnd` mkLimit is
+          , stTrans = stTrans `eAnd` mkLimit ts
           , ..}
 
-  addStateLimits Nothing st = st
-
 -- | Produce a limit expression for a numeric variable.
-varLimit :: String -- ^ Variable name
+varLimit :: Use    -- ^ Variable name
          -> Int    -- ^ Min value
          -> Int    -- ^ Max value
          -> Maybe Expr
@@ -140,11 +137,9 @@ varLimit var mn mx
   size      = numBits mx
   limitDiff = mx + 1
 
-  use       = EBit (UVar (VarNum var mn mx))
-
   step acc n
-    | testBit limitDiff n = EOr  (ENeg (use n)) acc
-    | otherwise           = EAnd (ENeg (use n)) acc
+    | testBit limitDiff n = EOr  (ENeg (EBit var n)) acc
+    | otherwise           = EAnd (ENeg (EBit var n)) acc
 
 
 implies :: Expr -> Expr -> Expr
