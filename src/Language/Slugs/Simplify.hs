@@ -18,7 +18,7 @@ simpState :: State -> State
 simpState State { .. } =
   State { stInit     = simpExpr stInit
         , stTrans    = simpExpr stTrans
-        , stLiveness = simpExpr stLiveness
+        , stLiveness = map simpExpr stLiveness
         }
 
 simpExpr :: Expr -> Expr

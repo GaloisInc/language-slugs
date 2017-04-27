@@ -22,7 +22,7 @@ data Spec = Spec { specInput  :: [Var]
 
 data State = State { stInit     :: Expr
                    , stTrans    :: Expr
-                   , stLiveness :: Expr
+                   , stLiveness :: [Expr]
                    } deriving (Show)
 
 data Use = UVar Var

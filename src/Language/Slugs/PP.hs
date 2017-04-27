@@ -22,9 +22,9 @@ ppSpec Spec { .. } = vcat $ concat $
 
 ppState :: String -> State -> [Doc]
 ppState pfx State { .. } =
-  [ section (pfx ++ "_INIT"),     ppTopExpr stInit,     text " "
-  , section (pfx ++ "_TRANS"),    ppTopExpr stTrans,    text " "
-  , section (pfx ++ "_LIVENESS"), ppTopExpr stLiveness, text " " ]
+  [ section (pfx ++ "_INIT"),     ppTopExpr stInit,      text " "
+  , section (pfx ++ "_TRANS"),    ppTopExpr stTrans,     text " "
+  , section (pfx ++ "_LIVENESS"), ppLiveness stLiveness, text " " ]
 
 section :: String -> Doc
 section str = char '[' <> text str <> char ']'
@@ -54,6 +54,9 @@ ppUse (UNext v) = ppVar v <> char '\''
 ppTopExpr :: Expr -> Doc
 ppTopExpr e = vcat (map ppExpr (elimEAnd e))
 
+ppLiveness :: [Expr] -> Doc
+ppLiveness [] = ppExpr ETrue
+ppLiveness es = vcat (map ppExpr es)
 
 ppExpr :: Expr -> Doc
 ppExpr (ENeg e)   = char '!' <+> ppExpr e
