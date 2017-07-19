@@ -5,6 +5,9 @@ module Language.Slugs.Simplify where
 import Language.Slugs.AST
 import Language.Slugs.Lens
 
+import Control.Monad (guard)
+import Data.List (group,sort)
+
 
 -- Simplification --------------------------------------------------------------
 
@@ -49,5 +52,20 @@ simpExpr1 (EXor e EFalse) = Just e
 
 simpExpr1 (EXor ETrue e)  = Just (ENeg e)
 simpExpr1 (EXor e ETrue)  = Just (ENeg e)
+
+simpExpr1 (EXor (ENeg a) b) | a == b = Just ETrue
+simpExpr1 (EXor a (ENeg b)) | a == b = Just ETrue
+
+simpExpr1 (EXor a b) | a == b = Just EFalse
+
+simpExpr1 e@EAnd{} =
+  do let gs = group (sort (elimEAnd e))
+     guard (any (> 1) (map length gs))
+     return (foldl EAnd ETrue (map head gs))
+
+simpExpr1 e@EOr{} =
+  do let gs = group (sort (elimEAnd e))
+     guard (any (> 1) (map length gs))
+     return (foldl EOr ETrue (map head gs))
 
 simpExpr1 _               = Nothing
