@@ -44,6 +44,7 @@ simpExpr1 (ENeg (ENeg e)) = Just e
 simpExpr1 (EAnd ETrue e)  = Just e
 simpExpr1 (EAnd e ETrue)  = Just e
 
+
 simpExpr1 (EOr EFalse e)  = Just e
 simpExpr1 (EOr e EFalse)  = Just e
 

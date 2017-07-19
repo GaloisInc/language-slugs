@@ -76,7 +76,7 @@ ppExpr (ERef n)   = char '?' <+> int n
 
 ppEBit :: Var -> Int -> Doc
 
-ppEBit var@(VarNum s l h) i
+ppEBit var@(VarNum _ l h) i
   | i == 0    = ppBit0 (ppVar var) l h
   | otherwise = ppBitN (ppVar var) i
 

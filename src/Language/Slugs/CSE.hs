@@ -4,8 +4,6 @@
 module Language.Slugs.CSE (cse) where
 
 import Language.Slugs.AST
-import Language.Slugs.Simplify
-import Language.Slugs.PP
 
 import qualified Data.Map.Strict    as Map
 import qualified Data.IntMap.Strict as IntMap

@@ -15,22 +15,20 @@ import Language.Slugs.AST
 import Language.Slugs.PP
 
 import           Control.Applicative (Alternative(..))
-import           Control.Monad (unless,when)
+import           Control.Monad (when)
 import           Data.Aeson
 import           Data.Attoparsec.ByteString.Lazy
-                     (Parser,parse,Result(..),satisfyWith,manyTill',many1,string
-                     ,sepBy,takeWhile1,inClass,skipWhile,endOfInput,satisfy,skip)
+                     (Parser,parse,Result(..),manyTill',string, sepBy,
+                     takeWhile1,inClass,skipWhile,endOfInput,skip)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
 import qualified Data.Map.Strict as Map
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import           Data.Typeable
 import           Data.Word (Word8)
 import           Numeric (readDec)
 import           System.Directory (getTemporaryDirectory,removeFile)
-import           System.Exit (ExitCode(..))
 import           System.IO (openTempFile,Handle,hFlush,hPrint,hClose)
 import           System.Process.ByteString.Lazy (readProcessWithExitCode)
 
@@ -73,7 +71,7 @@ runSlugs dbg slugs spec =
        do writeSpec spec h
           hClose h
 
-          (ec,out,err) <- readProcessWithExitCode slugs
+          (_,out,err) <- readProcessWithExitCode slugs
                              ["--explicitStrategy", tmpFile]
                              L.empty
 
@@ -103,7 +101,7 @@ runSlugs dbg slugs spec =
 
 counterStrategy :: Bool -> FilePath -> FilePath -> IO FSM
 counterStrategy dbg slugs specFile =
-  do (ec,out,err) <- readProcessWithExitCode slugs
+  do (_,out,err) <- readProcessWithExitCode slugs
                          ["--counterStrategy", specFile]
                          L.empty
 
@@ -156,13 +154,13 @@ newtype Nodes = Nodes (Map.Map Int Node)
 
 instance FromJSON Nodes where
   parseJSON = withObject "FSM Nodes" $ \ obj ->
-    do let parse (k,v) =
+    do let parseNode (k,v) =
              case T.decimal k of
                Right (n,_) -> do node <- parseJSON v
                                  return (n,node)
                Left err    -> fail err
 
-       nodes <- traverse parse (HM.toList obj)
+       nodes <- traverse parseNode (HM.toList obj)
        return (Nodes (Map.fromList nodes))
 
 instance FromJSON Node where
@@ -200,6 +198,9 @@ parseSlugsNode  =
      nTrans <- successors <|> noSuccessors
      skipSpaces
      return (d, (ix, Node { nState = s, .. }))
+
+
+successors, noSuccessors :: Parser [Int]
 
 successors =
   do _ <- string "With successors : "
