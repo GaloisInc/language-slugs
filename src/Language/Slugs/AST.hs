@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ParallelListComp #-}
 
 module Language.Slugs.AST where
 
@@ -57,17 +58,75 @@ traverseExpr f (EBuf es)  = EBuf <$> traverse f es
 traverseExpr _ e@ERef{}   = pure e
 
 
+skipBuffers :: Traversal' Expr Expr
+skipBuffers _ e@EBuf{} = pure e
+skipBuffers f e        = traverseExpr f e
+
+
+-- | Increment all references underneath this expression.
+modifyRefs :: (Int -> Int) -> (Expr -> Expr)
+modifyRefs modify = rewriteOf skipBuffers $ \ e ->
+  case e of
+    ERef i -> Just (ERef $! modify i)
+    _      -> Nothing
+
+
 -- AST Helpers -----------------------------------------------------------------
 
 {-# SPECIALIZE numBits :: Int -> Int #-}
 numBits :: Integral a => a -> Int
-numBits n | n <= 0    = 1
-          | otherwise = floor (logBase 2 (fromIntegral n)) + 1
+numBits n | n <= 0    = 0
+          | otherwise = floor (logBase 2 (fromIntegral n) :: Double) + 1
 
-class HasVar var where
-  toUse      :: var -> Use
-  toVar      :: var -> Var
-  varBitSize :: var -> Int
+
+class Atom expr where
+  -- | The number of bits required by this sub-expression.
+  bitSize :: expr -> Int
+
+  -- | Project the nth bit from the expression.
+  projBit :: expr -> Int -> Expr
+
+  -- | Convert to an @Expr@
+  toExpr :: expr -> Expr
+
+instance Atom Integer where
+  bitSize n = max (numBits n) 0
+
+  projBit n i | testBit n i = ETrue
+              | otherwise   = EFalse
+
+  -- XXX: should we even try to convert an integer literal to an expression?
+  toExpr _ = undefined
+
+instance Atom Var where
+  bitSize (VarBool _)    = 1
+  bitSize (VarNum _ _ h) = numBits h
+  {-# INLINE bitSize #-}
+
+  projBit var = projBit (toUse var)
+  {-# INLINE projBit #-}
+
+  toExpr v = EVar (UVar v)
+  {-# INLINE toExpr #-}
+
+instance Atom Use where
+  bitSize (UVar  v) = bitSize v
+  bitSize (UNext v) = bitSize v
+  {-# INLINE bitSize #-}
+
+  projBit u n
+    | n < bitSize u = case toVar u of
+                        VarBool{} -> EVar u
+                        VarNum{}  -> EBit u n
+    | otherwise     = error "Invalid bit projection"
+
+  toExpr = EVar
+  {-# INLINE toExpr #-}
+
+
+class Atom var => HasVar var where
+  toUse :: var -> Use
+  toVar :: var -> Var
 
 instance HasVar Use where
   toUse = id
@@ -77,9 +136,6 @@ instance HasVar Use where
   toVar (UNext v) = v
   {-# INLINE toVar #-}
 
-  varBitSize (UVar  v) = varBitSize v
-  varBitSize (UNext v) = varBitSize v
-  {-# INLINE varBitSize #-}
 
 instance HasVar Var where
   toUse = UVar
@@ -88,19 +144,21 @@ instance HasVar Var where
   toVar = id
   {-# INLINE toVar #-}
 
-  varBitSize (VarBool _)    = 1
-  varBitSize (VarNum _ _ h) = numBits h
-  {-# INLINE varBitSize #-}
 
+-- | Get a list of bits from an atomic expression.
+atomBits :: Atom var => var -> [Expr]
+atomBits var = [ projBit var i | i <- [ 0 .. bitSize var - 1 ] ]
 
-{-# SPECIALIZE assignConst :: Var -> Int -> Expr #-}
-assignConst :: (Bits a, Integral a, HasVar var) => var -> a -> Expr
-assignConst var n = foldl1' EAnd [ genBit i | i <- [ 0 .. varBitSize var - 1 ] ]
+-- | Pad the bits of an atomic expression to a known bit length.
+--
+-- prop> length (padBits var n) == max n 0
+padBits :: Atom var => var -> Int -> [Expr]
+padBits var n
+  | n < width = take n bits
+  | otherwise = bits ++ replicate (n - width) EFalse
   where
-  genBit i | testBit n i = EBit use i
-           | otherwise   = ENeg (EBit use i)
-
-  use = toUse var
+  width = bitSize var
+  bits  = [ projBit var i | i <- [ 0 .. width - 1 ] ]
 
 
 -- | Add variable limits for integer variables.
@@ -112,10 +170,10 @@ addLimits Spec {..} =
 
   where
 
-  envInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum n mn mx) <- specInput  ]
-  envTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum n mn mx) <- specInput  ]
-  sysInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum n mn mx) <- specOutput ]
-  sysTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum n mn mx) <- specOutput ]
+  envInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum _ mn mx) <- specInput  ]
+  envTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum _ mn mx) <- specInput  ]
+  sysInitLimits  = catMaybes [ varLimit (UVar  v) mn mx | v@(VarNum _ mn mx) <- specOutput ]
+  sysTransLimits = catMaybes [ varLimit (UNext v) mn mx | v@(VarNum _ mn mx) <- specOutput ]
 
   mkLimit ls | null ls   = ETrue
              | otherwise = foldl1' EAnd ls
@@ -130,7 +188,7 @@ varLimit :: Use    -- ^ Variable name
          -> Int    -- ^ Min value
          -> Int    -- ^ Max value
          -> Maybe Expr
-varLimit var mn mx
+varLimit var _ mx
   | mx == bit size - 1 = Nothing
   | otherwise          = Just (foldl step EFalse [0 .. size - 1])
   where
@@ -157,3 +215,68 @@ eAnd a b =
 elimEAnd :: Expr -> [Expr]
 elimEAnd (EAnd a b) = elimEAnd a ++ elimEAnd b
 elimEAnd e          = [e]
+
+
+-- Numeric Operations ----------------------------------------------------------
+
+assignConst :: (Bits a, Integral a, HasVar var) => var -> a -> Expr
+assignConst  = eqConst
+
+{-# SPECIALIZE eqConst :: Var -> Int -> Expr #-}
+eqConst :: (Bits a, Integral a, HasVar var) => var -> a -> Expr
+eqConst var n = foldl1' EAnd [ genBit i | i <- [ 0 .. bitSize var - 1 ] ]
+  where
+  genBit i | testBit n i = EBit use i
+           | otherwise   = ENeg (EBit use i)
+
+  use = toUse var
+
+
+mkBuffer :: [Expr] -> Int -> Expr
+mkBuffer es result = EBuf (es ++ [ ERef result ])
+
+
+-- | Generate the elements of a memory buffer that will implement the addition
+-- operation, as well as a list of expressions that select the bits that make up
+-- the result.
+--
+-- NOTE: this is translated from the `structuredslugs` compiler,
+-- https://github.com/VerifiableRobotics/slugs/blob/master/tools/StructuredSlugsParser/Parser.py
+add :: (Atom a, Atom b) => a -> b -> ([Expr],[Expr])
+add a b
+  | null as   = ([], bs)
+  | null bs   = ([], as)
+  | otherwise = (eqbits ++ overflow, result)
+  where
+  as = atomBits a
+  bs = atomBits b
+
+  (x0:xs,y0:ys) | length as < length bs = (as,bs)
+              | otherwise             = (bs,as)
+
+  s0 = x0 `EXor` y0
+  c0 = x0 `EAnd` y0
+
+  -- The parts where the two lists are the same length
+  -- NOTE: in the resulting buffer, sum and carry bits are interleaved
+  eqbits = s0
+         : c0
+         : concat [ [ sumBit x y cin, carryBit x y cin ]
+                  | i <- [ 1,3 .. ], let cin = ERef i
+                  | x <- xs
+                  | y <- ys ]
+
+  eqlen = length eqbits
+  xsLen = length xs
+
+  -- the parts of ys that overflow
+  overflow = concat [ [ y `EXor` cin, y `EAnd` prev ]
+                    | i <- [ eqlen, eqlen + 2 .. ]
+                    , let cin  = ERef (i - 1)
+                          prev = ERef (i - 2)
+                    | y <- drop xsLen ys ]
+
+  sumBit   x y cin = x `EXor` y `EXor` cin
+  carryBit x y cin = (x `EAnd` y) `EOr` ((x `EXor` y) `EAnd` cin)
+
+  result = [ ERef (i * 2) | i <- [ 0 .. max (bitSize a) (bitSize b) - 1 ] ]
