@@ -69,4 +69,7 @@ simpExpr1 e@EOr{} =
      guard (any (> 1) (map length gs))
      return (foldl EOr ETrue (map head gs))
 
+-- ignore buffers of 1
+simpExpr1 (EBuf [e])      = Just e
+
 simpExpr1 _               = Nothing
