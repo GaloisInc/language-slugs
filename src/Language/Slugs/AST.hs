@@ -63,12 +63,12 @@ skipBuffers _ e@EBuf{} = pure e
 skipBuffers f e        = traverseExpr f e
 
 
--- | Increment all references underneath this expression.
+-- | Modify all references underneath this expression.
 modifyRefs :: (Int -> Int) -> (Expr -> Expr)
-modifyRefs modify = rewriteOf skipBuffers $ \ e ->
+modifyRefs modify = transformOf skipBuffers $ \ e ->
   case e of
-    ERef i -> Just (ERef $! modify i)
-    _      -> Nothing
+    ERef i -> ERef $! modify i
+    _      -> e
 
 
 -- AST Helpers -----------------------------------------------------------------
