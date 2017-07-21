@@ -239,20 +239,27 @@ mkBuffer es result = EBuf (es ++ [ ERef result ])
 -- | Generate the elements of a memory buffer that will implement the addition
 -- operation, as well as a list of expressions that select the bits that make up
 -- the result.
+add :: (Atom a, Atom b) => a -> b -> ([Expr],[Expr])
+add a b = add' (atomBits a) (atomBits b)
+
+-- | Generate the elements of a memory buffer that will implement the addition
+-- operation, as well as a list of expressions that select the bits that make up
+-- the result.
 --
 -- NOTE: this is translated from the `structuredslugs` compiler,
 -- https://github.com/VerifiableRobotics/slugs/blob/master/tools/StructuredSlugsParser/Parser.py
-add :: (Atom a, Atom b) => a -> b -> ([Expr],[Expr])
-add a b
+add' :: [Expr] -> [Expr] -> ([Expr],[Expr])
+add' as bs
   | null as   = ([], bs)
   | null bs   = ([], as)
   | otherwise = (eqbits ++ overflow, result)
   where
-  as = atomBits a
-  bs = atomBits b
 
-  (x0:xs,y0:ys) | length as < length bs = (as,bs)
-              | otherwise             = (bs,as)
+  asLen = length as
+  bsLen = length bs
+
+  (x0:xs,y0:ys) | asLen < bsLen = (as,bs)
+                | otherwise     = (bs,as)
 
   s0 = x0 `EXor` y0
   c0 = x0 `EAnd` y0
@@ -270,13 +277,11 @@ add a b
   xsLen = length xs
 
   -- the parts of ys that overflow
-  overflow = concat [ [ y `EXor` cin, y `EAnd` prev ]
-                    | i <- [ eqlen, eqlen + 2 .. ]
-                    , let cin  = ERef (i - 1)
-                          prev = ERef (i - 2)
+  overflow = concat [ [ y `EXor` cin, y `EAnd` cin ]
+                    | i <- [ eqlen, eqlen + 2 .. ], let cin  = ERef (i - 1)
                     | y <- drop xsLen ys ]
 
   sumBit   x y cin = x `EXor` y `EXor` cin
   carryBit x y cin = (x `EAnd` y) `EOr` ((x `EXor` y) `EAnd` cin)
 
-  result = [ ERef (i * 2) | i <- [ 0 .. max (bitSize a) (bitSize b) - 1 ] ]
+  result = [ ERef (i * 2) | i <- [ 0 .. max asLen bsLen - 1 ] ]
