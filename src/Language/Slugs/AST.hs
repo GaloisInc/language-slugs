@@ -238,21 +238,21 @@ mkBuffer es result = EBuf (es ++ [ ERef result ])
 
 -- | Generate the elements of a memory buffer that will implement the addition
 -- operation, as well as a list of expressions that select the bits that make up
--- the result.
-add :: (Atom a, Atom b) => a -> b -> ([Expr],[Expr])
+-- the result, and the final carry bit, which is true if the addition overflows.
+add :: (Atom a, Atom b) => a -> b -> ([Expr],[Expr],Expr)
 add a b = add' (atomBits a) (atomBits b)
 
 -- | Generate the elements of a memory buffer that will implement the addition
 -- operation, as well as a list of expressions that select the bits that make up
--- the result.
+-- the result, and the final carry bit, which is true if the addition overflows.
 --
 -- NOTE: this is translated from the `structuredslugs` compiler,
 -- https://github.com/VerifiableRobotics/slugs/blob/master/tools/StructuredSlugsParser/Parser.py
-add' :: [Expr] -> [Expr] -> ([Expr],[Expr])
+add' :: [Expr] -> [Expr] -> ([Expr],[Expr],Expr)
 add' as bs
-  | null as   = ([], bs)
-  | null bs   = ([], as)
-  | otherwise = (eqbits ++ overflow, result)
+  | null as   = ([], bs, EFalse)
+  | null bs   = ([], as, EFalse)
+  | otherwise = (eqbits ++ overflow, result, lastCarry)
   where
 
   asLen = length as
@@ -284,4 +284,8 @@ add' as bs
   sumBit   x y cin = x `EXor` y `EXor` cin
   carryBit x y cin = (x `EAnd` y) `EOr` ((x `EXor` y) `EAnd` cin)
 
-  result = [ ERef (i * 2) | i <- [ 0 .. max asLen bsLen - 1 ] ]
+  answerBits = max asLen bsLen
+
+  result = [ ERef (i * 2) | i <- [ 0 .. answerBits - 1 ] ]
+
+  lastCarry = ERef (2 * answerBits)
