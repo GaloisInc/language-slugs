@@ -18,7 +18,7 @@ import           Control.Applicative (Alternative(..))
 import           Control.Monad (when)
 import           Data.Aeson
 import           Data.Attoparsec.ByteString.Lazy
-                     (Parser,parse,Result(..),manyTill',string, sepBy,
+                     (Parser,parse,Result(..),manyTill',string, sepBy',
                      takeWhile1,inClass,skipWhile,endOfInput,skip)
 import qualified Data.ByteString.Char8 as S
 import qualified Data.ByteString.Lazy.Char8 as L
@@ -109,7 +109,7 @@ counterStrategy dbg slugs specFile =
 
      case parseResponse err of
 
-       RespUnrealizable -> 
+       RespUnrealizable ->
          do when dbg (L.putStrLn out)
             case parseSlugsOut out of
               Just val -> return val
@@ -204,7 +204,7 @@ successors, noSuccessors :: Parser [Int]
 
 successors =
   do _ <- string "With successors : "
-     decimal `sepBy` (char ',' >> skipSpaces)
+     decimal `sepBy'` (char ',' >> skipSpaces)
 
 noSuccessors =
   do _ <- string "With no successors."
@@ -213,7 +213,7 @@ noSuccessors =
 
 parseSlugsState :: Parser ([String], [Int])
 parseSlugsState  = between (char '<') (char '>') $
-  do entries <- entry `sepBy` (char ',' >> skipSpaces)
+  do entries <- entry `sepBy'` (char ',' >> skipSpaces)
      return (unzip entries)
 
   where
